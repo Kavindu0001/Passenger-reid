@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ 'Entrance' if capture_type == 'entrance' else 'Exit' }} Capture - Passenger {{ passenger_id }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="container capture-container">
+        <header class="capture-header">
+            <h1>
+                <i class="fas {{ 'fa-door-open' if capture_type == 'entrance' else 'fa-door-closed' }}"></i>
+                {{ 'Entrance' if capture_type == 'entrance' else 'Exit' }} Capture
+            </h1>
+            <div class="header-actions">
+                <button class="btn btn-secondary" onclick="location.href='/dashboard'">
+                    <i class="fas fa-tachometer-alt"></i> Dashboard
+                </button>
+                <button class="btn btn-primary" onclick="location.href='/'">
+                    <i class="fas fa-home"></i> Home
+                </button>
+            </div>
+        </header>
+
+        <div class="capture-content">
+            <!-- Passenger Info -->
+            <div class="passenger-info-card">
+                <h3><i class="fas fa-user"></i> Passenger Information</h3>
+                <div class="passenger-details">
+                    <div class="detail-item">
+                        <span class="detail-label">Passenger ID:</span>
+                        <span class="detail-value">{{ passenger_id }}</span>
+                    </div>
+                    <div id="passengerExtraInfo">
+                        <!-- Additional info will be loaded here -->
+                    </div>
+                </div>
+
+                {% if capture_type == 'entrance' %}
+                <div class="name-input">
+                    <label for="passengerName">Passenger Name (Optional):</label>
+                    <input type="text" id="passengerName" placeholder="Enter passenger name">
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Camera Section -->
+            <div class="camera-section">
+                <h3><i class="fas fa-camera"></i> Camera</h3>
+                <div class="camera-container">
+                    <video id="cameraPreview" autoplay playsinline></video>
+                    <div class="camera-overlay">
+                        <div class="overlay-frame" id="overlayFrame"></div>
+                        <div class="capture-countdown" id="countdown">
+                            Ready to capture
+                        </div>
+                    </div>
+                </div>
+
+                <div class="camera-controls">
+                    <button class="btn btn-primary" id="startCameraBtn" onclick="startCamera()">
+                        <i class="fas fa-play"></i> Start Camera
+                    </button>
+                    <button class="btn btn-secondary" id="stopCameraBtn" onclick="stopCamera()" disabled>
+                        <i class="fas fa-stop"></i> Stop Camera
+                    </button>
+                    <button class="btn btn-success" id="captureBtn" onclick="captureImage()" disabled>
+                        <i class="fas fa-camera"></i> Capture Image
+                    </button>
+                </div>
+            </div>
+
+            <!-- Captured Images -->
+            <div class="captured-images-section">
+                <h3>
+                    <i class="fas fa-images"></i>
+                    Captured Images ({{ image_count }} required)
+                    <span id="captureProgress">0/{{ image_count }}</span>
+                </h3>
+
+                <div class="images-grid" id="imagesGrid">
+                    <!-- Captured images will appear here -->
+                </div>
+
+                <div class="capture-instructions">
+                    <div class="instruction">
+                        <i class="fas fa-info-circle"></i>
+                        <p>
+                            {% if capture_type == 'entrance' %}
+                            Capture {{ image_count }} images of the passenger entering.
+                            Make sure face is clearly visible in each image.
+                            {% else %}
+                            Capture 1 image of the passenger exiting.
+                            System will compare with entrance images.
+                            {% endif %}
+                        </p>
+                    </div>
+                    <div class="instruction">
+                        <i class="fas fa-lightbulb"></i>
+                        <p>Ensure good lighting and clear visibility of the passenger's face.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="capture-actions">
+                <button class="btn btn-secondary" onclick="location.href='/dashboard'">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+                <button class="btn btn-primary" id="submitBtn" onclick="submitImages()" disabled>
+                    <i class="fas fa-paper-plane"></i>
+                    {{ 'Submit Entrance Images' if capture_type == 'entrance' else 'Submit Exit Image' }}
+                </button>
+                <button class="btn btn-success" id="autoCaptureBtn" onclick="autoCapture()" disabled>
+                    <i class="fas fa-bolt"></i> Auto-capture ({{ image_count }} images)
+                </button>
+            </div>
+        </div>
+
+        <!-- Status Messages -->
+        <div class="status-messages" id="statusMessages">
+            <!-- Status messages will appear here -->
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script>
+        // Global variables
+        let stream = null;
+        let capturedImages = [];
+        let isCapturing = false;
+        const requiredImages = {{ image_count }};
+        const captureType = '{{ capture_type }}';
+        const passengerId = '{{ passenger_id }}';
+
+        // DOM Elements
+        const cameraPreview = document.getElementById('cameraPreview');
+        const startCameraBtn = document.getElementById('startCameraBtn');
+        const stopCameraBtn = document.getElementById('stopCameraBtn');
+        const captureBtn = document.getElementById('captureBtn');
+        const submitBtn = document.getElementById('submitBtn');
+        const autoCaptureBtn = document.getElementById('autoCaptureBtn');
+        const imagesGrid = document.getElementById('imagesGrid');
+        const captureProgress = document.getElementById('captureProgress');
+        const statusMessages = document.getElementById('statusMessages');
+        const overlayFrame = document.getElementById('overlayFrame');
+        const countdown = document.getElementById('countdown');
+
+        // Load passenger info if not new
+        if (passengerId !== 'new') {
+            fetch(`/api/check_passenger/${passengerId}`)
+                .then(response => response.json())
+                .then(data => {
+                    const infoDiv = document.getElementById('passengerExtraInfo');
+                    if (data.exists) {
+                        infoDiv.innerHTML = `
+                            <div class="detail-item">
+                                <span class="detail-label">Name:</span>
+                                <span class="detail-value">${data.name}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Total Journeys:</span>
+                                <span class="detail-value">${data.total_journeys}</span>
+                            </div>
+                            <div class="detail-item">
+                                <span class="detail-label">Last Seen:</span>
+                                <span class="detail-value">${data.last_seen ? new Date(data.last_seen).toLocaleString() : 'Never'}</span>
+                            </div>
+                        `;
+
+                        // Auto-fill name input for entrance
+                        if (captureType === 'entrance') {
+                            document.getElementById('passengerName').value = data.name;
+                        }
+                    }
+                });
+        }
+
+        // Camera functions
+        async function startCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        width: { ideal: 640 },
+                        height: { ideal: 480 },
+                        facingMode: 'user'
+                    },
+                    audio: false
+                });
+
+                cameraPreview.srcObject = stream;
+                startCameraBtn.disabled = true;
+                stopCameraBtn.disabled = false;
+                captureBtn.disabled = false;
+                autoCaptureBtn.disabled = false;
+
+                showStatus('Camera started successfully', 'success');
+            } catch (err) {
+                console.error('Error accessing camera:', err);
+                showStatus('Failed to access camera: ' + err.message, 'error');
+            }
+        }
+
+        function stopCamera() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                cameraPreview.srcObject = null;
+                stream = null;
+
+                startCameraBtn.disabled = false;
+                stopCameraBtn.disabled = true;
+                captureBtn.disabled = true;
+                autoCaptureBtn.disabled = true;
+
+                showStatus('Camera stopped', 'info');
+            }
+        }
+
+        function captureImage() {
+            if (!stream) {
+                showStatus('Please start camera first', 'error');
+                return;
+            }
+
+            if (capturedImages.length >= requiredImages) {
+                showStatus(`Already captured ${requiredImages} images`, 'warning');
+                return;
+            }
+
+            // Create canvas and draw video frame
+            const canvas = document.createElement('canvas');
+            canvas.width = cameraPreview.videoWidth;
+            canvas.height = cameraPreview.videoHeight;
+
+            const context = canvas.getContext('2d');
+            context.drawImage(cameraPreview, 0, 0, canvas.width, canvas.height);
+
+            // Convert to blob
+            canvas.toBlob(blob => {
+                if (blob) {
+                    // Create object URL for preview
+                    const imageUrl = URL.createObjectURL(blob);
+
+                    // Add to captured images
+                    capturedImages.push({
+                        blob: blob,
+                        url: imageUrl,
+                        timestamp: new Date().toLocaleTimeString()
+                    });
+
+                    // Update UI
+                    updateCapturedImages();
+                    updateProgress();
+
+                    showStatus(`Image ${capturedImages.length} captured successfully`, 'success');
+
+                    // Auto-enable submit if enough images
+                    if (capturedImages.length >= requiredImages) {
+                        submitBtn.disabled = false;
+                        showStatus(`All ${requiredImages} images captured. Ready to submit.`, 'success');
+                    }
+                }
+            }, 'image/jpeg', 0.9);
+        }
+
+        async function autoCapture() {
+            if (!stream) {
+                showStatus('Please start camera first', 'error');
+                return;
+            }
+
+            if (capturedImages.length >= requiredImages) {
+                showStatus(`Already captured ${requiredImages} images`, 'warning');
+                return;
+            }
+
+            isCapturing = true;
+            captureBtn.disabled = true;
+            autoCaptureBtn.disabled = true;
+
+            // Clear any existing images if we're starting fresh
+            if (capturedImages.length === 0) {
+                capturedImages = [];
+                imagesGrid.innerHTML = '';
+            }
+
+            // Countdown and capture
+            for (let i = capturedImages.length; i < requiredImages; i++) {
+                if (!isCapturing) break;
+
+                // Update countdown
+                countdown.textContent = `Capturing image ${i + 1} of ${requiredImages} in 3...`;
+                await sleep(1000);
+                countdown.textContent = `Capturing image ${i + 1} of ${requiredImages} in 2...`;
+                await sleep(1000);
+                countdown.textContent = `Capturing image ${i + 1} of ${requiredImages} in 1...`;
+                await sleep(1000);
+
+                // Capture
+                countdown.textContent = 'Capturing...';
+                captureImage();
+                await sleep(500);
+            }
+
+            countdown.textContent = 'Capture complete!';
+            isCapturing = false;
+            captureBtn.disabled = false;
+            autoCaptureBtn.disabled = false;
+
+            if (capturedImages.length >= requiredImages) {
+                showStatus(`Auto-capture complete. ${requiredImages} images captured.`, 'success');
+            }
+        }
+
+        function updateCapturedImages() {
+            imagesGrid.innerHTML = '';
+
+            capturedImages.forEach((img, index) => {
+                const imgDiv = document.createElement('div');
+                imgDiv.className = 'image-preview';
+                imgDiv.innerHTML = `
+                    <div class="image-container">
+                        <img src="${img.url}" alt="Captured image ${index + 1}">
+                        <div class="image-overlay">
+                            <span class="image-number">${index + 1}</span>
+                            <span class="image-time">${img.timestamp}</span>
+                            <button class="btn-remove" onclick="removeImage(${index})">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+                imagesGrid.appendChild(imgDiv);
+            });
+        }
+
+        function updateProgress() {
+            const progress = capturedImages.length;
+            captureProgress.textContent = `${progress}/${requiredImages}`;
+            captureProgress.className = progress >= requiredImages ? 'progress-complete' : 'progress-incomplete';
+        }
+
+        function removeImage(index) {
+            capturedImages.splice(index, 1);
+            updateCapturedImages();
+            updateProgress();
+
+            if (capturedImages.length < requiredImages) {
+                submitBtn.disabled = true;
+            }
+
+            showStatus(`Image ${index + 1} removed`, 'info');
+        }
+
+        async function submitImages() {
+            if (capturedImages.length < requiredImages) {
+                showStatus(`Please capture ${requiredImages} images first`, 'error');
+                return;
+            }
+
+            submitBtn.disabled = true;
+            showStatus('Submitting images...', 'info');
+
+            // Convert blobs to base64
+            const imagePromises = capturedImages.map(img =>
+                blobToBase64(img.blob)
+            );
+
+            const base64Images = await Promise.all(imagePromises);
+
+            // Prepare form data
+            const formData = new FormData();
+
+            if (captureType === 'entrance') {
+                const passengerName = document.getElementById('passengerName').value || 'Unknown';
+                formData.append('name', passengerName);
+
+                // Add images as files
+                capturedImages.forEach((img, index) => {
+                    formData.append('images[]', img.blob, `image_${index + 1}.jpg`);
+                });
+
+                // Also add as base64 for backup
+                formData.append('image_data[]', JSON.stringify(base64Images));
+            } else {
+                // Exit - only one image
+                formData.append('image', capturedImages[0].blob, 'exit_image.jpg');
+                formData.append('image_data', base64Images[0]);
+            }
+
+            // Submit to server
+            const endpoint = captureType === 'entrance'
+                ? `/capture_entrance/${passengerId}`
+                : `/capture_exit/${passengerId}`;
+
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showStatus(data.message, 'success');
+
+                    // Redirect after delay
+                    if (captureType === 'exit' && data.redirect) {
+                        showStatus('Redirecting to results...', 'info');
+                        setTimeout(() => {
+                            window.location.href = data.redirect;
+                        }, 2000);
+                    } else if (captureType === 'entrance') {
+                        showStatus('Redirecting to dashboard...', 'info');
+                        setTimeout(() => {
+                            window.location.href = '/dashboard';
+                        }, 2000);
+                    }
+                } else {
+                    showStatus('Error: ' + data.error, 'error');
+                    submitBtn.disabled = false;
+                }
+            } catch (error) {
+                showStatus('Network error: ' + error.message, 'error');
+                submitBtn.disabled = false;
+            }
+        }
+
+        // Utility functions
+        function blobToBase64(blob) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+        }
+
+        function showStatus(message, type) {
+            const statusDiv = document.createElement('div');
+            statusDiv.className = `status-message status-${type}`;
+            statusDiv.innerHTML = `
+                <i class="fas ${getStatusIcon(type)}"></i>
+                <span>${message}</span>
+                <button class="btn-close" onclick="this.parentElement.remove()">
+                    <i class="fas fa-times"></i>
+                </button>
+            `;
+
+            statusMessages.appendChild(statusDiv);
+
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                if (statusDiv.parentElement) {
+                    statusDiv.remove();
+                }
+            }, 5000);
+        }
+
+        function getStatusIcon(type) {
+            const icons = {
+                'success': 'fa-check-circle',
+                'error': 'fa-exclamation-circle',
+                'warning': 'fa-exclamation-triangle',
+                'info': 'fa-info-circle'
+            };
+            return icons[type] || 'fa-info-circle';
+        }
+
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        // Clean up on page unload
+        window.addEventListener('beforeunload', () => {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+
+            // Revoke object URLs
+            capturedImages.forEach(img => {
+                URL.revokeObjectURL(img.url);
+            });
+        });
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            updateProgress();
+        });
+    </script>
+</body>
+</html>

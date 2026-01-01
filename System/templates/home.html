@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Passenger Anomaly Detection System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1><i class="fas fa-bus"></i> Passenger Anomaly Detection System</h1>
+            <p class="subtitle">Real-time appearance anomaly detection using GAN-based ML models</p>
+        </header>
+
+        <div class="quick-actions">
+            <div class="action-card" onclick="startJourney()">
+                <i class="fas fa-play-circle"></i>
+                <h3>Start Bus Turn</h3>
+                <p>Begin a new bus journey</p>
+            </div>
+
+            <div class="action-card" onclick="location.href='/dashboard'">
+                <i class="fas fa-tachometer-alt"></i>
+                <h3>Live Dashboard</h3>
+                <p>Monitor real-time activity</p>
+            </div>
+
+            <div class="action-card" onclick="location.href='/history'">
+                <i class="fas fa-history"></i>
+                <h3>Travel History</h3>
+                <p>View passenger journeys</p>
+            </div>
+
+            <div class="action-card" onclick="location.href='/about'">
+                <i class="fas fa-info-circle"></i>
+                <h3>System Info</h3>
+                <p>Learn about the system</p>
+            </div>
+        </div>
+
+        <div class="system-overview">
+            <h2><i class="fas fa-cogs"></i> System Overview</h2>
+            <div class="overview-grid">
+                <div class="overview-item">
+                    <h4><i class="fas fa-camera"></i> Image Capture</h4>
+                    <p>4 entrance images within 5 seconds + 1 exit image</p>
+                </div>
+                <div class="overview-item">
+                    <h4><i class="fas fa-brain"></i> ML Processing</h4>
+                    <p>GAN-based anomaly detection with Siamese network</p>
+                </div>
+                <div class="overview-item">
+                    <h4><i class="fas fa-database"></i> Data Storage</h4>
+                    <p>MongoDB with comprehensive journey tracking</p>
+                </div>
+                <div class="overview-item">
+                    <h4><i class="fas fa-bell"></i> Real-time Alerts</h4>
+                    <p>Instant anomaly alerts with confidence scores</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="quick-start">
+            <h2><i class="fas fa-rocket"></i> Quick Start</h2>
+            <div class="start-steps">
+                <div class="step">
+                    <span class="step-number">1</span>
+                    <h4>Start Bus Turn</h4>
+                    <p>Click "Start Bus Turn" to begin a new journey</p>
+                </div>
+                <div class="step">
+                    <span class="step-number">2</span>
+                    <h4>Capture Entrance</h4>
+                    <p>For each passenger: Enter ID and capture 4 entrance images</p>
+                </div>
+                <div class="step">
+                    <span class="step-number">3</span>
+                    <h4>Capture Exit</h4>
+                    <p>When passenger exits: Capture 1 image for comparison</p>
+                </div>
+                <div class="step">
+                    <span class="step-number">4</span>
+                    <h4>View Results</h4>
+                    <p>Check anomaly detection results in real-time</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="status-bar">
+            <div class="status-item">
+                <span class="status-label">System Status:</span>
+                <span class="status-value active">Active</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">ML Models:</span>
+                <span class="status-value loaded">Loaded</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Database:</span>
+                <span class="status-value connected">Connected</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script>
+        function startJourney() {
+            fetch('/start_journey', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(`Bus turn started: ${data.bus_turn_id}`);
+                    location.href = '/dashboard';
+                } else {
+                    alert('Failed to start bus turn');
+                }
+            });
+        }
+    </script>
+</body>
+</html>

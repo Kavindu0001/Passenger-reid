@@ -1,0 +1,11 @@
+2025-12-19 01:18:40,373 - __main__ - INFO - ============================================================
+2025-12-19 01:18:40,373 - __main__ - INFO - MongoDB Auto-Setup for Passenger Anomaly Detection System
+2025-12-19 01:18:40,374 - __main__ - INFO - ============================================================
+2025-12-19 01:18:40,374 - __main__ - INFO - Checking MongoDB installation...
+2025-12-19 01:18:40,382 - __main__ - INFO - ✓ MongoDB is installed (Unix)
+2025-12-19 01:18:40,383 - __main__ - INFO - Checking MongoDB service status...
+2025-12-19 01:18:40,590 - __main__ - INFO - ✓ MongoDB service is running
+2025-12-19 01:18:40,590 - __main__ - INFO - Setting up database...
+2025-12-19 01:18:41,064 - __main__ - INFO - ✓ Database connection established
+2025-12-19 01:18:41,064 - __main__ - ERROR - Error setting up database: 'MongoDBConfig' object has no attribute 'insert_sample_data'
+2025-12-19 01:18:41,064 - __main__ - ERROR - Failed to setup database

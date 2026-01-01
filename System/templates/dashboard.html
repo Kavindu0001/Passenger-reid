@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Dashboard - Anomaly Detection</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
+</head>
+<body>
+    <div class="container dashboard-container">
+        <header class="dashboard-header">
+            <h1><i class="fas fa-tachometer-alt"></i> Live Dashboard</h1>
+            <div class="header-actions">
+                <button class="btn btn-primary" onclick="location.href='/'">
+                    <i class="fas fa-home"></i> Home
+                </button>
+                <button class="btn btn-secondary" onclick="location.href='/history'">
+                    <i class="fas fa-history"></i> History
+                </button>
+                <button class="btn btn-danger" onclick="endJourney()" id="endJourneyBtn">
+                    <i class="fas fa-stop-circle"></i> End Journey
+                </button>
+            </div>
+        </header>
+
+        <div class="dashboard-grid">
+            <!-- Bus Turn Info -->
+            <div class="dashboard-card">
+                <h3><i class="fas fa-bus"></i> Current Bus Turn</h3>
+                <div class="bus-turn-info">
+                    {% if current_bus_turn %}
+                    <div class="info-row">
+                        <span class="info-label">Turn ID:</span>
+                        <span class="info-value">{{ current_bus_turn.bus_turn_id }}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Started:</span>
+                        <span class="info-value">{{ current_bus_turn.start_time.strftime('%H:%M:%S') }}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Duration:</span>
+                        <span class="info-value" id="duration">Calculating...</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Status:</span>
+                        <span class="status-badge active">Active</span>
+                    </div>
+                    {% else %}
+                    <div class="no-turn">
+                        <i class="fas fa-exclamation-circle"></i>
+                        <p>No active bus turn</p>
+                        <button class="btn btn-primary" onclick="location.href='/'">
+                            Start a Turn
+                        </button>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Statistics -->
+            <div class="dashboard-card">
+                <h3><i class="fas fa-chart-bar"></i> Statistics</h3>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value">{{ active_passengers }}</div>
+                        <div class="stat-label">Active Passengers</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">{{ current_bus_turn.passenger_count if current_bus_turn else 0 }}</div>
+                        <div class="stat-label">Today's Passengers</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">{{ today_journeys }}</div>
+                        <div class="stat-label">Today's Journeys</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">{{ current_bus_turn.anomaly_count if current_bus_turn else 0 }}</div>
+                        <div class="stat-label">Anomalies</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Camera Feed -->
+            <div class="dashboard-card wide-card">
+                <h3><i class="fas fa-video"></i> Camera Feed</h3>
+                <div class="camera-feed">
+                    <img src="{{ url_for('video_feed') }}" alt="Camera Feed" id="cameraFeed">
+                    <div class="camera-controls">
+                        <button class="btn btn-small" onclick="captureTest()">
+                            <i class="fas fa-camera"></i> Test Capture
+                        </button>
+                        <button class="btn btn-small" onclick="toggleCamera()">
+                            <i class="fas fa-power-off"></i> Toggle Camera
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Alerts -->
+            <div class="dashboard-card wide-card">
+                <h3><i class="fas fa-bell"></i> Recent Alerts</h3>
+                <div class="alerts-container">
+                    <div class="alerts-list" id="alertsList">
+                        {% for alert in recent_alerts %}
+                        <div class="alert-item {{ 'alert-anomaly' if alert.alert_type == 'anomaly' else 'alert-normal' }}">
+                            <div class="alert-icon">
+                                <i class="fas {{ 'fa-exclamation-triangle' if alert.alert_type == 'anomaly' else 'fa-check-circle' }}"></i>
+                            </div>
+                            <div class="alert-content">
+                                <div class="alert-header">
+                                    <span class="alert-passenger">Passenger {{ alert.passenger_id }}</span>
+                                    <span class="alert-time">{{ alert.timestamp.strftime('%H:%M:%S') }}</span>
+                                </div>
+                                <div class="alert-details">
+                                    {{ 'ANOMALY DETECTED' if alert.alert_type == 'anomaly' else 'Normal Exit' }}
+                                    <span class="alert-confidence">({{ "%.1f"|format(alert.confidence * 100) }}%)</span>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Status -->
+            <div class="dashboard-card">
+                <h3><i class="fas fa-server"></i> System Status</h3>
+                <div class="status-list">
+                    <div class="status-item">
+                        <span class="status-label">ML Models:</span>
+                        <span class="status-indicator active"></span>
+                        <span class="status-text">Loaded</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Database:</span>
+                        <span class="status-indicator active"></span>
+                        <span class="status-text">Connected</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Camera:</span>
+                        <span class="status-indicator active"></span>
+                        <span class="status-text">Active</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Processing:</span>
+                        <span class="status-indicator active"></span>
+                        <span class="status-text">Real-time</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="dashboard-card">
+                <h3><i class="fas fa-bolt"></i> Quick Actions</h3>
+                <div class="quick-actions-list">
+                    <button class="action-btn" onclick="location.href='/capture_entrance/new'">
+                        <i class="fas fa-user-plus"></i> New Passenger
+                    </button>
+                    <button class="action-btn" onclick="showPassengerExit()">
+                        <i class="fas fa-user-minus"></i> Passenger Exit
+                    </button>
+                    <button class="action-btn" onclick="location.href='/history'">
+                        <i class="fas fa-search"></i> Search History
+                    </button>
+                    <button class="action-btn" onclick="generateReport()">
+                        <i class="fas fa-file-export"></i> Generate Report
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Real-time Updates -->
+        <div class="real-time-updates">
+            <h3><i class="fas fa-sync-alt"></i> Real-time Updates</h3>
+            <div class="updates-log" id="updatesLog">
+                <!-- Updates will appear here via WebSocket -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Exit Modal -->
+    <div class="modal" id="exitModal">
+        <div class="modal-content">
+            <h3><i class="fas fa-door-open"></i> Passenger Exit</h3>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="exitPassengerId">Passenger ID:</label>
+                    <input type="text" id="exitPassengerId" placeholder="Enter passenger ID">
+                </div>
+                <div class="modal-actions">
+                    <button class="btn btn-secondary" onclick="closeExitModal()">Cancel</button>
+                    <button class="btn btn-primary" onclick="processExit()">Process Exit</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script>
+        // Initialize WebSocket
+        const socket = io();
+
+        // Update duration timer
+        function updateDuration() {
+            {% if current_bus_turn %}
+            const startTime = new Date("{{ current_bus_turn.start_time.isoformat() }}");
+            const now = new Date();
+            const diff = Math.floor((now - startTime) / 1000);
+            const hours = Math.floor(diff / 3600);
+            const minutes = Math.floor((diff % 3600) / 60);
+            const seconds = diff % 60;
+            document.getElementById('duration').textContent =
+                `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            {% endif %}
+        }
+
+        // Update every second
+        setInterval(updateDuration, 1000);
+        updateDuration();
+
+        // WebSocket event handlers
+        socket.on('passenger_exit', function(data) {
+            const log = document.getElementById('updatesLog');
+            const timestamp = new Date().toLocaleTimeString();
+            const alertType = data.anomaly ? 'anomaly' : 'normal';
+
+            const update = document.createElement('div');
+            update.className = `update-item update-${alertType}`;
+            update.innerHTML = `
+                <span class="update-time">${timestamp}</span>
+                <span class="update-text">
+                    Passenger ${data.passenger_id} exited -
+                    ${data.anomaly ? 'ANOMALY DETECTED' : 'Normal'}
+                    (${(data.confidence * 100).toFixed(1)}%)
+                </span>
+            `;
+
+            log.insertBefore(update, log.firstChild);
+
+            // Keep only last 10 updates
+            while (log.children.length > 10) {
+                log.removeChild(log.lastChild);
+            }
+
+            // Show notification
+            showNotification(
+                data.anomaly ? 'Anomaly Detected!' : 'Passenger Exited',
+                `Passenger ${data.passenger_id} - ${data.anomaly ? 'Anomaly detected' : 'Normal exit'}`,
+                data.anomaly ? 'warning' : 'success'
+            );
+        });
+
+        socket.on('connection_established', function(data) {
+            console.log('WebSocket connected');
+        });
+
+        // Modal functions
+        function showPassengerExit() {
+            document.getElementById('exitModal').style.display = 'flex';
+        }
+
+        function closeExitModal() {
+            document.getElementById('exitModal').style.display = 'none';
+        }
+
+        function processExit() {
+            const passengerId = document.getElementById('exitPassengerId').value;
+            if (passengerId) {
+                location.href = `/capture_exit/${passengerId}`;
+            } else {
+                alert('Please enter a passenger ID');
+            }
+        }
+
+        function endJourney() {
+            if (confirm('Are you sure you want to end the current bus turn?')) {
+                fetch('/end_journey', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Bus turn ended successfully!');
+                        location.reload();
+                    } else {
+                        alert('Failed to end bus turn: ' + data.error);
+                    }
+                });
+            }
+        }
+
+        function generateReport() {
+            alert('Report generation feature coming soon!');
+        }
+
+        function captureTest() {
+            alert('Test capture initiated');
+        }
+
+        function toggleCamera() {
+            alert('Camera toggle feature coming soon!');
+        }
+
+        // Close modal on outside click
+        window.onclick = function(event) {
+            const modal = document.getElementById('exitModal');
+            if (event.target == modal) {
+                closeExitModal();
+            }
+        }
+    </script>
+</body>
+</html>
